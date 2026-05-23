@@ -20,24 +20,37 @@ from langchain_core.tools import Tool
 
 
 HERE = Path(__file__).resolve().parent
-SUPPORT_LLM_URL = os.getenv("SUPPORT_LLM_URL", "http://localhost:8001")
+KB_LLM_URL = os.getenv("KB_LLM_URL", "http://localhost:8001/v1")
+KB_LLM_MODEL = os.getenv("KB_LLM_MODEL", "vxstudio-enterprise-slm")
 
 
 # ── tools ──────────────────────────────────────────────────────────────────
 
 def _support_kb_lookup(query: str) -> str:
+    """Hit the SLM brain's OpenAI-compatible /v1/chat/completions.
+
+    Same wire format as OpenAI, vLLM, Ollama, LM Studio, TGI — swap
+    KB_LLM_URL to point at any of them.
+    """
     try:
         r = httpx.post(
-            f"{SUPPORT_LLM_URL}/v1/support/query",
-            json={"query": query, "top_k": 3},
-            timeout=10.0,
+            f"{KB_LLM_URL}/chat/completions",
+            json={
+                "model": KB_LLM_MODEL,
+                "messages": [{"role": "user", "content": query}],
+                "temperature": 0.2,
+                "max_tokens": 400,
+            },
+            timeout=15.0,
         )
         if r.status_code != 200:
-            return f"Support KB returned {r.status_code}. Try again or escalate."
+            return f"KB returned {r.status_code}. Try again or escalate."
         data = r.json()
-        return data.get("answer") or data.get("response") or str(data)
+        return data["choices"][0]["message"]["content"]
     except httpx.HTTPError as e:
-        return f"Support KB unreachable ({e.__class__.__name__}). Tell the user honestly and offer to escalate."
+        return f"KB unreachable ({e.__class__.__name__}). Tell the user honestly and offer to escalate."
+    except (KeyError, IndexError, TypeError) as e:
+        return f"KB returned malformed response ({e}). Try again or escalate."
 
 
 def _lesson_plan(payload: str) -> str:

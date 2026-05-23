@@ -28,7 +28,7 @@ from services.ai.onboarding_agent import build_onboarding_agent  # noqa: E402
 from services.ai.training_agent import build_training_agent      # noqa: E402
 
 
-SUPPORT_LLM_URL = os.getenv("SUPPORT_LLM_URL", "http://localhost:8001")
+KB_LLM_URL = os.getenv("KB_LLM_URL", "http://localhost:8001/v1")
 
 app = FastAPI(
     title="vxstudio_enterprise_agent",
@@ -75,7 +75,7 @@ class ChatResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     agents: list[str]
-    support_llm_url: str
+    kb_llm_url: str
     provider_configured: bool
 
 
@@ -86,7 +86,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         agents=["onboarding", "training"],
-        support_llm_url=SUPPORT_LLM_URL,
+        kb_llm_url=KB_LLM_URL,
         provider_configured=bool(
             os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
         ),

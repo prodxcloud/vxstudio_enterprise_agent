@@ -61,7 +61,8 @@ Request body for `/chat`:
 | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | unset | BYOK. First one set wins (Anthropic preferred). |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Override Anthropic model |
 | `OPENAI_MODEL` | `gpt-4o-mini` | Override OpenAI model |
-| `SUPPORT_LLM_URL` | `http://localhost:8001` | Where `support_kb_lookup` calls the FAISS brain |
+| `KB_LLM_URL` | `http://localhost:8001/v1` | OpenAI-compatible base URL of the KB SLM. Works against vxstudio_enterprise_llm, vLLM, Ollama, LM Studio, TGI, or OpenAI itself. |
+| `KB_LLM_MODEL` | `vxstudio-enterprise-slm` | Model id sent in the chat-completion request |
 
 ## Design notes
 
