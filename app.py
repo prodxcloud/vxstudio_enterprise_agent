@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -79,6 +79,28 @@ class HealthResponse(BaseModel):
     provider_configured: bool
 
 
+class RunRequest(BaseModel):
+    agent: str
+    message: str
+
+
+class TestCheck(BaseModel):
+    name: str
+    ok: bool
+    detail: str
+
+
+class TestResponse(BaseModel):
+    ok: bool
+    checks: list[TestCheck]
+
+
+class LogsResponse(BaseModel):
+    lines: int
+    out: list[str]
+    err: list[str]
+
+
 # ── routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse)
@@ -128,6 +150,68 @@ def chat_training(req: ChatRequest) -> ChatResponse:
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     return ChatResponse(agent="training", reply=reply)
+
+
+def _run_agent(req: RunRequest) -> ChatResponse:
+    try:
+        agent = _get_agent(req.agent)
+        reply = agent.run(req.message)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return ChatResponse(agent=req.agent, reply=reply)
+
+
+@app.post("/run", response_model=ChatResponse)
+def run(req: RunRequest) -> ChatResponse:
+    return _run_agent(req)
+
+
+@app.post("/execute", response_model=ChatResponse)
+def execute(req: RunRequest) -> ChatResponse:
+    return _run_agent(req)
+
+
+@app.get("/test", response_model=TestResponse)
+def self_test() -> TestResponse:
+    checks: list[TestCheck] = []
+
+    has_key = bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    checks.append(TestCheck(
+        name="provider_key",
+        ok=has_key,
+        detail="ANTHROPIC_API_KEY or OPENAI_API_KEY set" if has_key
+        else "no LLM provider key in env",
+    ))
+
+    base = Path(__file__).resolve().parent
+    for name, folder in (("onboarding", "onboarding_agent"), ("training", "training_agent")):
+        for asset in ("soul.md", "skill.md"):
+            p = base / "services" / "ai" / folder / asset
+            checks.append(TestCheck(
+                name=f"{name}_{asset.split('.')[0]}",
+                ok=p.exists(),
+                detail=str(p),
+            ))
+
+    checks.append(TestCheck(name="kb_llm_url", ok=True, detail=KB_LLM_URL))
+    return TestResponse(ok=all(c.ok for c in checks), checks=checks)
+
+
+@app.get("/logs", response_model=LogsResponse)
+def logs(lines: int = Query(50, ge=1, le=1000)) -> LogsResponse:
+    base = Path(__file__).resolve().parent
+
+    def tail(p: Path) -> list[str]:
+        if not p.exists():
+            return []
+        with p.open(encoding="utf-8", errors="replace") as f:
+            return [line.rstrip("\n") for line in f.readlines()[-lines:]]
+
+    return LogsResponse(
+        lines=lines,
+        out=tail(base / "server.out.log"),
+        err=tail(base / "server.err.log"),
+    )
 
 
 if __name__ == "__main__":
